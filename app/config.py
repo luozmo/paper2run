@@ -35,7 +35,7 @@ DSH_HOME = Path(
 DSH_PROVIDER = os.getenv("PAPER2RUN_DSH_PROVIDER", "deepseek-official")
 DSH_MODEL = os.getenv("PAPER2RUN_DSH_MODEL", "deepseek-v4-flash")
 DSH_PROFILE = os.getenv("PAPER2RUN_DSH_PROFILE", "sdk")
-DSH_MAX_TOKENS = int(os.getenv("PAPER2RUN_DSH_MAX_TOKENS", "8192"))
+DSH_MAX_TOKENS = int(os.getenv("PAPER2RUN_DSH_MAX_TOKENS", "32768"))
 
 REQUEST_TIMEOUT_SECONDS = float(
     os.getenv("PAPER2RUN_REQUEST_TIMEOUT_SECONDS", "300")
