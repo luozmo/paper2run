@@ -74,3 +74,11 @@
 ## 可选精简建议的落实
 
 用户授权移除仅转发构造器的局部 table 函数。五处调用直接构造 _TableBlock，参数与默认值保持一致，未改变格式、文件行为或公开接口。完整测试 **38 passed in 1.53s**，差异空白检查通过；复用已有页面验收依据。
+
+## 按仓库文档交付
+
+用户后续明确要求依照 README 和 CONTRIBUTING 的功能分支、PR、成员 Review 与 CI 流程完成交付。已重新获取 origin/main 并执行 rebase，核对 rebase 后的最终文件树与已验证的 8570545 完全一致；本地完整测试仍为 38 项通过。
+
+已将 feat/reporting 推送到 luozmo/paper2run，并创建面向 main 的 [PR #1](https://github.com/luozmo/paper2run/pull/1)。功能版本 648fce0 的 GitHub Actions [CI](https://github.com/luozmo/paper2run/actions/runs/42600835598) 已通过，合并检查无冲突。此节为后续交付状态，替代上文各实现阶段“尚未推送、未创建 PR”的历史描述。
+
+记录填写时尚无组员评审，PR 保持打开。依 CONTRIBUTING，至少一位成员 Review 且最新 CI 通过后方可合并；未绕过该条件合并 main，也未发送额外的组员消息。最新检查结果以 PR 页面为准。

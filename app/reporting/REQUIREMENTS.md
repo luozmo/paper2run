@@ -2,7 +2,7 @@
 
 ## 当前范围
 
-2026-11-09：用户负责 Markdown、Word 报告导出，已逐项接受 Q1～Q11 并批准四张本地工单。随后明确调用 implement-spec 开始实现，授权在本地集成分支完成代码、测试与审查；子智能体使用 GPT-6.1 Sol。不发布 Issue 或 PR，不修改全仓配置。
+2026-11-09：用户负责 Markdown、Word 报告导出，已逐项接受 Q1～Q11 并批准四张本地工单。随后明确调用 implement-spec 开始实现，授权完成代码、测试与审查；子智能体使用 GPT-6.1 Sol。用户后续明确要求按 README 的协作流程交付，现已推送 feat/reporting 并创建 PR #1，等待组员 Review 后合并。规格和工单继续保存在本地文档中，不发布 Issue、不修改全仓配置。
 
 阅读基线为 main 的 1a731c7，已读 README 第三节、CONTRIBUTING.md、app/interfaces.py、app/models.py、app/pipeline/orchestrator.py 和相关契约、流水线测试。
 
