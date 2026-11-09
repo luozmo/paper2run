@@ -79,3 +79,20 @@ def test_present_but_empty_modules_are_not_negative_findings(tmp_path):
     for text in ["未提供仓库检查依赖信息", "未提供参数对照条目", "未提供运行入口与命令信息"]:
         assert text in md and text in word
     assert doc.styles["Normal"].font.size.pt == 11
+
+def test_evidence_reused_and_traceable_in_both_documents(tmp_path):
+    source = Evidence(kind="paper", locator="paper.pdf", page=3, quote="Original quotation", url="https://example.org/paper")
+    paths = PaperReportRenderer().render(PaperReport(paper=PaperMetadata(title="Trace", evidence=[source]), experiment_parameters=[ExperimentParameter(name="batch", value="32", evidence=[source])]), tmp_path)
+    doc = Document(paths[1])
+    for output in [paths[0].read_text(encoding="utf-8"), "\n".join([p.text for p in doc.paragraphs] + [c.text for t in doc.tables for r in t.rows for c in r.cells])]:
+        assert output.count("[E1]") >= 3
+        assert "[E2]" not in output
+        for text in ["paper.pdf", "第 3 页", "Original quotation", "https://example.org/paper"]:
+            assert text in output
+
+def test_unrelated_repository_fields_do_not_inherit_candidate_evidence(tmp_path):
+    report = PaperReport(paper=PaperMetadata(title="No evidence"), selected_repo_url="https://example.org/selected", repo_candidates=[RepoCandidate(url="https://example.org/selected", evidence=[Evidence(kind="web", locator="source-only")])])
+    paths = PaperReportRenderer().render(report, tmp_path)
+    for output in [paths[0].read_text(encoding="utf-8"), "\n".join(p.text for p in Document(paths[1]).paragraphs)]:
+        assert "选中仓库：https://example.org/selected（未提供证据）" in output
+        assert "仓库可用状态：无法确认（未提供证据）" in output

@@ -11,10 +11,21 @@ class ReportExportError(RuntimeError):
 
 
 def _sections(report: PaperReport) -> list[tuple[str, list[str]]]:
+    evidence = []
+    def refs(items):
+        labels = []
+        for item in items:
+            if item not in evidence:
+                evidence.append(item)
+            label = f"[E{evidence.index(item) + 1}]"
+            if label not in labels:
+                labels.append(label)
+        return "、".join(labels) or "未提供证据"
     paper = report.paper
     metadata = [f"标题：{paper.title}", "作者：" + ("、".join(paper.authors) or "未提供")]
     for label, value in [("年份", paper.year), ("出版信息", paper.venue), ("DOI", paper.doi), ("链接", paper.url), ("摘要", paper.abstract)]:
         metadata.append(f"{label}：{value if value is not None else '未提供'}")
+    metadata.append("论文信息证据：" + refs(paper.evidence))
     available = {"found": "已找到", "not_found": "未找到", "uncertain": "无法确认"}
     official = {"official": "官方", "likely_official": "可能官方", "third_party": "第三方", "unknown": "无法确认"}
     scope = {"core": "核心", "training": "训练", "evaluation": "评测", "optional": "可选", "unknown": "无法确认"}
@@ -24,16 +35,16 @@ def _sections(report: PaperReport) -> list[tuple[str, list[str]]]:
         return str(v) if v is not None else "未提供"
     def table(headers, rows):
         return (headers, rows)
-    repo = [f"仓库可用状态：{available[report.code_availability]}", f"选中仓库：{value(report.selected_repo_url)}"]
+    repo = [f"仓库可用状态：{available[report.code_availability]}（未提供证据）", f"选中仓库：{value(report.selected_repo_url)}（未提供证据）"]
     if report.repo_candidates:
-        repo.append(table(["候选仓库", "所有者", "名称", "官方状态", "置信度", "说明"], [[r.url, value(r.owner), value(r.name), official[r.official_status], str(r.confidence), value(r.notes)] for r in report.repo_candidates]))
+        repo.append(table(["候选仓库", "所有者", "名称", "官方状态", "置信度", "说明", "证据"], [[r.url, value(r.owner), value(r.name), official[r.official_status], str(r.confidence), value(r.notes), refs(r.evidence)] for r in report.repo_candidates]))
     else:
         repo.append("未提供候选仓库信息。")
     dependencies = []
     def deps(label, items):
         dependencies.append(label)
         if items:
-            dependencies.append(table(["名称", "版本", "用途", "置信度"], [[d.name, value(d.version), scope[d.scope], str(d.confidence)] for d in items]))
+            dependencies.append(table(["名称", "版本", "用途", "置信度", "证据"], [[d.name, value(d.version), scope[d.scope], str(d.confidence), refs([d.source])] for d in items]))
         else:
             dependencies.append(f"未提供{label}信息。")
     deps("汇总依赖", report.dependencies)
@@ -44,24 +55,34 @@ def _sections(report: PaperReport) -> list[tuple[str, list[str]]]:
         commands.append("未提供仓库检查结果，运行入口与命令尚未提供。")
     else:
         deps("仓库检查依赖", inspection.dependencies)
-        dependencies.extend([f"检查仓库：{inspection.repo_url}", f"README 路径：{value(inspection.readme_path)}", f"仓库结构说明：{value(inspection.structure_summary)}"])
-        dependencies.append(table(["依赖清单路径", "清单类型"], [[m.path, str(m.kind)] for m in inspection.manifests]) if inspection.manifests else "未提供依赖清单信息。")
+        dependencies.extend([f"检查仓库：{inspection.repo_url}（未提供证据）", f"README 路径：{value(inspection.readme_path)}（未提供证据）", f"仓库结构说明：{value(inspection.structure_summary)}（未提供证据）"])
+        dependencies.append(table(["依赖清单路径", "清单类型", "证据"], [[m.path, str(m.kind), refs([m.evidence])] for m in inspection.manifests]) if inspection.manifests else "未提供依赖清单信息。")
         for entry in inspection.entry_points:
+            commands.append("入口及入口命令证据：" + refs(entry.evidence))
             commands.extend([f"运行入口：{entry.path}（置信度：{entry.confidence}）", ("code", entry.command)] if entry.command is not None else [f"运行入口：{entry.path}；未提供入口命令。"])
         for command in inspection.run_commands:
-            commands.extend(["运行命令", ("code", command)])
+            commands.extend(["运行命令（未提供证据）", ("code", command)])
         if not commands:
             commands.append("未提供运行入口与命令信息。")
-    conditions = [table(["类别", "参数", "值", "置信度"], [[category[p.category], p.name, p.value, str(p.confidence)] for p in report.experiment_parameters])] if report.experiment_parameters else ["未提供论文实验条件信息。"]
+    conditions = [table(["类别", "参数", "值", "置信度", "证据"], [[category[p.category], p.name, p.value, str(p.confidence), refs(p.evidence)] for p in report.experiment_parameters])] if report.experiment_parameters else ["未提供论文实验条件信息。"]
     comparison = report.experiment_comparison
-    comparisons = ["未提供参数对照结果。"] if comparison is None else ([table(["类别", "参数", "论文值", "仓库值", "状态", "说明"], [[category[i.category], i.name, value(i.paper_value), value(i.repo_value), status[i.status], value(i.notes)] for i in comparison.items])] if comparison.items else ["未提供参数对照条目。"])
+    comparisons = ["未提供参数对照结果。"] if comparison is None else ([table(["类别", "参数", "论文值", "仓库值", "状态", "说明", "证据"], [[category[i.category], i.name, value(i.paper_value), value(i.repo_value), status[i.status], value(i.notes), refs(i.evidence)] for i in comparison.items])] if comparison.items else ["未提供参数对照条目。"])
     warnings = []
     for context, missing, messages in [("报告", report.missing_items, report.warnings), ("仓库检查", [], inspection.warnings if inspection else []), ("参数对照", comparison.missing_items if comparison else [], comparison.warnings if comparison else [])]:
         for item in missing:
             warnings.append(f"{context}缺失项：{item.field}；{item.description}；原因：{value(item.reason)}")
         warnings.extend(f"{context}警告：{message}" for message in messages)
     overview = ["本报告文档整理已有分析数据，供准备复现论文时查阅。", f"上游仓库可用状态：{available[report.code_availability]}。", f"已提供候选仓库 {len(report.repo_candidates)} 个、汇总依赖 {len(report.dependencies)} 项、论文实验条件 {len(report.experiment_parameters)} 项。", "仓库检查结果：" + ("已提供。" if inspection else "未提供。"), "参数对照结果：" + ("已提供。" if comparison else "未提供。"), f"已有缺失项与警告 {len(warnings)} 条，详见对应章节。"]
-    return [("概览", overview), ("论文基本信息", metadata), ("代码仓库及官方状态", repo), ("依赖与环境", dependencies), ("运行入口与命令", commands), ("论文实验条件", conditions), ("参数对照", comparisons), ("缺失项与警告", warnings or ["未提供缺失项与警告信息。"]), ("证据", ["未提供证据。"]) ]
+    evidence_blocks = []
+    for number, item in enumerate(evidence, 1):
+        evidence_blocks.append(f"[E{number}] 来源：{item.kind}；位置：{item.locator}")
+        if item.page is not None:
+            evidence_blocks.append(f"第 {item.page} 页")
+        if item.quote is not None:
+            evidence_blocks.append("原文引用：" + item.quote)
+        if item.url is not None:
+            evidence_blocks.append("链接：" + item.url)
+    return [("概览", overview), ("论文基本信息", metadata), ("代码仓库及官方状态", repo), ("依赖与环境", dependencies), ("运行入口与命令", commands), ("论文实验条件", conditions), ("参数对照", comparisons), ("缺失项与警告", warnings or ["未提供缺失项与警告信息。"]), ("证据", evidence_blocks or ["未提供证据。"]) ]
 
 
 
