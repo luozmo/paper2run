@@ -104,6 +104,16 @@ def test_literal_markup_and_embedded_fences_remain_content(tmp_path):
     assert "&lt;b&gt;\\*literal\\*&lt;/b&gt; &amp; entity" in md
     assert "````text\necho hi\n```\necho bye\n````" in md
 
+
+def test_multiline_prose_keeps_list_and_rule_markers_literal(tmp_path):
+    literal = "first\n+ literal\n- literal\n1. literal\n2) literal\n---\n===\n  + indented"
+    report = PaperReport(paper=PaperMetadata(title="字面文本", abstract=literal))
+    markdown_path, word_path = PaperReportRenderer().render(report, tmp_path)
+    markdown = markdown_path.read_text(encoding="utf-8")
+    for expected in [r"\+ literal", r"\- literal", r"1\. literal", r"2\) literal", r"\---", r"\===", r"  \+ indented"]:
+        assert expected in markdown
+    assert "摘要：" + literal in [p.text for p in Document(word_path).paragraphs]
+
 def test_word_tables_repeat_headers_and_anchor_first_row(tmp_path):
     paths = PaperReportRenderer().render(PaperReport(paper=PaperMetadata(title="Layout"), repo_candidates=[RepoCandidate(url="https://example.org/" + "long" * 100)]), tmp_path)
     table = Document(paths[1]).tables[0]
@@ -149,3 +159,35 @@ def test_word_notes_remain_associated_and_table_labels_stay_with_tables(tmp_path
     assert next(p for p in doc.paragraphs if p.text == "汇总依赖").paragraph_format.keep_with_next
     md = paths[0].read_text(encoding="utf-8")
     assert "候选说明全文" in md and "参数说明全文" in md
+
+
+def test_word_table_layouts_fit_distinct_column_roles(tmp_path):
+    report = PaperReport(
+        paper=PaperMetadata(title="列角色"),
+        repo_candidates=[RepoCandidate(url="https://example.org/repo", owner="team")],
+        experiment_comparison=ExperimentComparison(items=[
+            ExperimentComparisonItem(name="learning_rate", paper_value="0.01", repo_value="0.02")
+        ]),
+    )
+    _, word_path = PaperReportRenderer().render(report, tmp_path)
+    candidate, comparison = Document(word_path).tables
+    # URLs need more room than owner names; parameter names need more than categories.
+    assert candidate.columns[0].width > candidate.columns[1].width
+    assert comparison.columns[1].width > comparison.columns[0].width
+
+
+def test_word_headings_use_explicit_chinese_fonts_without_theme_fallback(tmp_path):
+    from docx.oxml.ns import qn
+
+    _, word_path = PaperReportRenderer().render(
+        PaperReport(paper=PaperMetadata(title="论文复现分析报告")), tmp_path
+    )
+    document = Document(word_path)
+    for style_name in ["Title", "Heading 1", "Title Char", "Heading 1 Char"]:
+        properties = document.styles[style_name].element.find(qn("w:rPr"))
+        fonts = properties.find(qn("w:rFonts"))
+        assert not any("theme" in name.lower() for name in fonts.attrib)
+        for slot in ["ascii", "hAnsi", "eastAsia", "cs"]:
+            assert fonts.get(qn("w:" + slot)) == "黑体"
+        language = properties.find(qn("w:lang"))
+        assert language is not None and language.get(qn("w:eastAsia")) == "zh-CN"

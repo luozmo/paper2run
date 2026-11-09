@@ -3,7 +3,7 @@ import html
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypeAlias
+from typing import Literal, TypeAlias
 
 from docx import Document
 from docx.shared import Mm, RGBColor, Pt
@@ -28,9 +28,21 @@ class _CodeBlock:
 
 
 @dataclass(frozen=True)
+class _TableColumn:
+    label: str
+    width: int
+    role: Literal["value", "identity", "note"] = "value"
+
+
+@dataclass(frozen=True)
 class _TableBlock:
-    headers: list[str]
+    columns: list[_TableColumn]
     rows: list[list[str]]
+    identity_label: str = ""
+
+    @property
+    def headers(self) -> list[str]:
+        return [column.label for column in self.columns]
 
 
 _Block: TypeAlias = _TextBlock | _CodeBlock | _TableBlock
@@ -59,18 +71,18 @@ def _sections(report: PaperReport) -> list[tuple[str, list[_Block]]]:
     status = {"match": "一致", "mismatch": "不一致", "missing_in_repository": "仓库缺失", "missing_in_paper": "论文缺失", "unknown": "无法确认"}
     def value(v):
         return str(v) if v is not None else "未提供"
-    def table(headers: list[str], rows: list[list[str]]) -> _TableBlock:
-        return _TableBlock(headers, rows)
+    def table(columns: list[_TableColumn], rows: list[list[str]], identity_label: str = "") -> _TableBlock:
+        return _TableBlock(columns, rows, identity_label)
     repo = [f"仓库可用状态：{available[report.code_availability]}（未提供证据）", f"选中仓库：{value(report.selected_repo_url)}（未提供证据）"]
     if report.repo_candidates:
-        repo.append(table(["候选仓库", "所有者", "名称", "官方状态", "置信度", "说明", "证据"], [[r.url, value(r.owner), value(r.name), official[r.official_status], str(r.confidence), value(r.notes), refs(r.evidence)] for r in report.repo_candidates]))
+        repo.append(table([_TableColumn("候选仓库", 30, "identity"), _TableColumn("所有者", 18), _TableColumn("名称", 18), _TableColumn("官方状态", 18), _TableColumn("置信度", 14), _TableColumn("说明", 18, "note"), _TableColumn("证据", 14)], [[r.url, value(r.owner), value(r.name), official[r.official_status], str(r.confidence), value(r.notes), refs(r.evidence)] for r in report.repo_candidates], identity_label="候选仓库"))
     else:
         repo.append("未提供候选仓库信息。")
     dependencies = []
     def deps(label, items):
         dependencies.append(label)
         if items:
-            dependencies.append(table(["名称", "版本", "用途", "置信度", "证据"], [[d.name, value(d.version), scope[d.scope], str(d.confidence), refs([d.source])] for d in items]))
+            dependencies.append(table([_TableColumn("名称", 22), _TableColumn("版本", 28), _TableColumn("用途", 18), _TableColumn("置信度", 12), _TableColumn("证据", 14)], [[d.name, value(d.version), scope[d.scope], str(d.confidence), refs([d.source])] for d in items]))
         else:
             dependencies.append(f"未提供{label}信息。")
     deps("汇总依赖", report.dependencies)
@@ -82,7 +94,7 @@ def _sections(report: PaperReport) -> list[tuple[str, list[_Block]]]:
     else:
         deps("仓库检查依赖", inspection.dependencies)
         dependencies.extend([f"检查仓库：{inspection.repo_url}（未提供证据）", f"README 路径：{value(inspection.readme_path)}（未提供证据）", f"仓库结构说明：{value(inspection.structure_summary)}（未提供证据）"])
-        dependencies.append(table(["依赖清单路径", "清单类型", "证据"], [[m.path, str(m.kind), refs([m.evidence])] for m in inspection.manifests]) if inspection.manifests else "未提供依赖清单信息。")
+        dependencies.append(table([_TableColumn("依赖清单路径", 45), _TableColumn("清单类型", 22), _TableColumn("证据", 27)], [[m.path, str(m.kind), refs([m.evidence])] for m in inspection.manifests]) if inspection.manifests else "未提供依赖清单信息。")
         for entry in inspection.entry_points:
             commands.append("入口及入口命令证据：" + refs(entry.evidence))
             commands.extend([f"运行入口：{entry.path}（置信度：{entry.confidence}）", _CodeBlock(entry.command)] if entry.command is not None else [f"运行入口：{entry.path}；未提供入口命令。"])
@@ -90,9 +102,9 @@ def _sections(report: PaperReport) -> list[tuple[str, list[_Block]]]:
             commands.extend(["运行命令（未提供证据）", _CodeBlock(command)])
         if not commands:
             commands.append("未提供运行入口与命令信息。")
-    conditions = [table(["类别", "参数", "值", "置信度", "证据"], [[category[p.category], p.name, p.value, str(p.confidence), refs(p.evidence)] for p in report.experiment_parameters])] if report.experiment_parameters else ["未提供论文实验条件信息。"]
+    conditions = [table([_TableColumn("类别", 22), _TableColumn("参数", 28), _TableColumn("值", 18), _TableColumn("置信度", 12), _TableColumn("证据", 14)], [[category[p.category], p.name, p.value, str(p.confidence), refs(p.evidence)] for p in report.experiment_parameters])] if report.experiment_parameters else ["未提供论文实验条件信息。"]
     comparison = report.experiment_comparison
-    comparisons = ["未提供参数对照结果。"] if comparison is None else ([table(["类别", "参数", "论文值", "仓库值", "状态", "说明", "证据"], [[category[i.category], i.name, value(i.paper_value), value(i.repo_value), status[i.status], value(i.notes), refs(i.evidence)] for i in comparison.items])] if comparison.items else ["未提供参数对照条目。"])
+    comparisons = ["未提供参数对照结果。"] if comparison is None else ([table([_TableColumn("类别", 14), _TableColumn("参数", 28, "identity"), _TableColumn("论文值", 18), _TableColumn("仓库值", 18), _TableColumn("状态", 18), _TableColumn("说明", 18, "note"), _TableColumn("证据", 14)], [[category[i.category], i.name, value(i.paper_value), value(i.repo_value), status[i.status], value(i.notes), refs(i.evidence)] for i in comparison.items], identity_label="参数")] if comparison.items else ["未提供参数对照条目。"])
     warnings = []
     for context, missing, messages in [("报告", report.missing_items, report.warnings), ("仓库检查", [], inspection.warnings if inspection else []), ("参数对照", comparison.missing_items if comparison else [], comparison.warnings if comparison else [])]:
         for item in missing:
@@ -115,7 +127,12 @@ def _sections(report: PaperReport) -> list[tuple[str, list[_Block]]]:
 
 def _literal(text: str) -> str:
     text = html.escape(text, quote=False)
-    return re.sub(r"([\\`*{}\[\]#_!|>~])", r"\\\1", text).replace("\n", "<br>\n")
+    text = re.sub(r"([\\`*{}\[\]#_!|>~])", r"\\\1", text)
+    # A line break does not stop CommonMark from recognizing a new list or rule.
+    text = re.sub(r"(?m)^([ \t]*)([-+])(?=[ \t])", r"\1\\\2", text)
+    text = re.sub(r"(?m)^([ \t]*\d{1,9})([.)])(?=[ \t])", r"\1\\\2", text)
+    text = re.sub(r"(?m)^([ \t]*)([-=])(?=[-= \t]*$)", r"\1\\\2", text)
+    return text.replace("\n", "<br>\n")
 
 
 def _markdown_block(block: _Block) -> str:
@@ -128,6 +145,25 @@ def _markdown_block(block: _Block) -> str:
     def row(values):
         return "| " + " | ".join(_literal(v).replace("<br>\n", "<br>") for v in values) + " |"
     return "\n".join([row(headers), row(["---"] * len(headers))] + [row(r) for r in rows])
+
+
+def _set_style_font(style, font_name: str) -> None:
+    """Pin all script slots so inherited Office themes cannot split Chinese glyphs."""
+    style.font.name = font_name
+    properties = style.element.get_or_add_rPr()
+    fonts = properties.get_or_add_rFonts()
+    for attribute in list(fonts.attrib):
+        if "theme" in attribute.lower():
+            del fonts.attrib[attribute]
+    for slot in ["ascii", "hAnsi", "eastAsia", "cs"]:
+        fonts.set(qn("w:" + slot), font_name)
+    fonts.set(qn("w:hint"), "eastAsia")
+    language = properties.find(qn("w:lang"))
+    if language is None:
+        language = OxmlElement("w:lang")
+        properties.append(language)
+    language.set(qn("w:val"), "zh-CN")
+    language.set(qn("w:eastAsia"), "zh-CN")
 
 
 class PaperReportRenderer:
@@ -151,15 +187,14 @@ class PaperReportRenderer:
             section.top_margin = section.bottom_margin = Mm(20)
             section.left_margin = section.right_margin = Mm(22)
             normal = document.styles["Normal"]
-            normal.font.name = "宋体"
+            _set_style_font(normal, "宋体")
             normal.font.size = Pt(11)
-            normal.element.get_or_add_rPr().rFonts.set(qn("w:eastAsia"), "宋体")
             normal.paragraph_format.space_after = Pt(6)
             normal.paragraph_format.line_spacing = 1.15
-            for name in ["Title", "Heading 1"]:
+            for name in ["Title", "Heading 1", "Title Char", "Heading 1 Char"]:
                 style = document.styles[name]
+                _set_style_font(style, "黑体")
                 style.font.color.rgb = RGBColor(0, 0, 0)
-                style.element.get_or_add_rPr().rFonts.set(qn("w:eastAsia"), "黑体")
                 for element in style.element.iter():
                     for attribute in ["w:themeColor", "w:themeTint", "w:themeShade"]:
                         element.attrib.pop(qn(attribute), None)
@@ -177,19 +212,19 @@ class PaperReportRenderer:
                         run = document.add_paragraph().add_run(line.text)
                         run.font.name = "Consolas"
                     else:
-                        headers, rows = line.headers, line.rows
+                        visible = [i for i, column in enumerate(line.columns) if column.role != "note"]
+                        headers = [line.columns[i].label for i in visible]
+                        rows = [[row[i] for i in visible] for row in line.rows]
                         notes = []
-                        if "说明" in headers:
-                            note_column = headers.index("说明")
-                            identity_column = headers.index("候选仓库") if "候选仓库" in headers else headers.index("参数")
-                            label = "候选仓库" if "候选仓库" in headers else "参数"
-                            notes = [f"{label} {row[identity_column]}；说明：{row[note_column]}" for row in rows]
-                            headers = [header for i, header in enumerate(headers) if i != note_column]
-                            rows = [[cell for i, cell in enumerate(row) if i != note_column] for row in rows]
+                        note_column = next((i for i, column in enumerate(line.columns) if column.role == "note"), None)
+                        if note_column is not None:
+                            identity_column = next(i for i, column in enumerate(line.columns) if column.role == "identity")
+                            note_label = line.columns[note_column].label
+                            notes = [f"{line.identity_label} {row[identity_column]}；{note_label}：{row[note_column]}" for row in line.rows]
                         t = document.add_table(rows=1, cols=len(headers))
                         t.style = "Table Grid"
                         t.autofit = False
-                        weights = {6: [30, 18, 18, 18, 14, 14], 7: [22, 13, 14, 15, 10, 18, 12], 5: [22, 28, 18, 12, 14], 3: [45, 22, 27]}[len(headers)]
+                        weights = [line.columns[i].width for i in visible]
                         for column, weight in zip(t.columns, weights):
                             column.width = Mm(166 * weight / sum(weights))
                         t.rows[0]._tr.get_or_add_trPr().append(OxmlElement("w:tblHeader"))
