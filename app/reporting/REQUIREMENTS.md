@@ -38,7 +38,7 @@
 
 ## 当前检查点与后续工作
 
-需求采访及四张本地工单实现已完成，没有待用户回答的问题。用户随后授权 implement-spec，代码已在 feat/reporting 集成分支完成，并根据后续复查修复了 Markdown 行首转义、表格列角色配置和标题混字三项问题；当前完整测试 32 项通过，三组新样例的最终 9 页 Word 已逐页检查并核对标题字体。验收依据见同目录 VALIDATION.md；流水线和命令行的正式接入由集成负责人维护。
+需求采访及四张本地工单实现已完成，没有待用户回答的问题。用户随后授权 implement-spec，代码已在 feat/reporting 集成分支完成，并根据后续复查修复了 Markdown 转义与表格语法、不同换行符、表格列角色配置和标题混字问题；当前完整测试 38 项通过，实际 Markdown 解析验证和 Word 页面检查依据见同目录 VALIDATION.md。流水线和命令行的正式接入由集成负责人维护。
 
 后续用户调用 to-spec，已复查现有接口与上述需求，并生成同目录 SPEC.md。规格包含 30 条用户故事、实现边界、以 ReportRenderer.render 为入口的行为测试及页面验收标准。本次没有发现需要重开需求讨论的阻塞问题。项目缺少 issue tracker 与 triage 标签配置；依据 to-spec 的明确要求，告知用户先运行 /setup-matt-pocock-skills，因此暂未发布远程 Issue 或应用 ready-for-agent 标签。
 

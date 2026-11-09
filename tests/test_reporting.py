@@ -105,6 +105,17 @@ def test_literal_markup_and_embedded_fences_remain_content(tmp_path):
     assert "````text\necho hi\n```\necho bye\n````" in md
 
 
+def test_markdown_table_syntax_is_not_escaped_with_cell_data(tmp_path):
+    report = PaperReport(
+        paper=PaperMetadata(title="表格语法"),
+        repo_candidates=[RepoCandidate(url="https://example.org/repo", name="---")],
+    )
+    markdown_path, _ = PaperReportRenderer().render(report, tmp_path)
+    markdown = markdown_path.read_text(encoding="utf-8")
+    assert "| --- | --- | --- | --- | --- | --- | --- |" in markdown.splitlines()
+    assert r"| \--- |" in markdown  # Literal cell data remains escaped.
+
+
 def test_multiline_prose_keeps_list_and_rule_markers_literal(tmp_path):
     literal = "first\n+ literal\n- literal\n1. literal\n2) literal\n---\n===\n  + indented"
     report = PaperReport(paper=PaperMetadata(title="字面文本", abstract=literal))
@@ -113,6 +124,37 @@ def test_multiline_prose_keeps_list_and_rule_markers_literal(tmp_path):
     for expected in [r"\+ literal", r"\- literal", r"1\. literal", r"2\) literal", r"\---", r"\===", r"  \+ indented"]:
         assert expected in markdown
     assert "摘要：" + literal in [p.text for p in Document(word_path).paragraphs]
+
+
+@pytest.mark.parametrize("newline", ["\r\n", "\r"])
+def test_windows_and_legacy_newlines_render_as_literal_line_breaks(tmp_path, newline):
+    literal = newline.join(["first", "+ literal", "1. literal", "---", "==="])
+    source = Evidence(kind="paper", locator="page 1", quote=literal)
+    report = PaperReport(paper=PaperMetadata(title="换行", abstract=literal, evidence=[source]))
+    markdown_path, word_path = PaperReportRenderer().render(report, tmp_path)
+    # The Windows file writer may use CRLF; reject stray CR inside field content.
+    markdown = markdown_path.read_bytes().decode("utf-8").replace("\r\n", "\n")
+    expected = r"first<br>" + "\n" + r"\+ literal<br>" + "\n" + r"1\. literal<br>" + "\n" + r"\---<br>" + "\n" + r"\==="
+    assert "摘要：" + expected in markdown
+    assert "原文引用：" + expected in markdown
+    assert "\r" not in markdown
+    assert "摘要：" + literal.replace("\r\n", "\n").replace("\r", "\n") in [
+        p.text for p in Document(word_path).paragraphs
+    ]
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n", "\r"])
+def test_command_newline_styles_keep_the_same_logical_lines(tmp_path, newline):
+    command = newline.join(["python train.py", "python evaluate.py"])
+    report = PaperReport(
+        paper=PaperMetadata(title="Command newlines"),
+        repo_inspection=RepoInspectionResult(repo_url="https://example.org/repo", run_commands=[command]),
+    )
+    markdown_path, word_path = PaperReportRenderer().render(report, tmp_path)
+    markdown = markdown_path.read_bytes().decode("utf-8").replace("\r\n", "\n")
+    assert "```text\npython train.py\npython evaluate.py\n```" in markdown
+    assert "\r" not in markdown
+    assert "python train.py\npython evaluate.py" in [p.text for p in Document(word_path).paragraphs]
 
 def test_word_tables_repeat_headers_and_anchor_first_row(tmp_path):
     paths = PaperReportRenderer().render(PaperReport(paper=PaperMetadata(title="Layout"), repo_candidates=[RepoCandidate(url="https://example.org/" + "long" * 100)]), tmp_path)

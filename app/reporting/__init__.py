@@ -125,7 +125,12 @@ def _sections(report: PaperReport) -> list[tuple[str, list[_Block]]]:
 
 
 
+def _normalize_newlines(text: str) -> str:
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
 def _literal(text: str) -> str:
+    text = _normalize_newlines(text)
     text = html.escape(text, quote=False)
     text = re.sub(r"([\\`*{}\[\]#_!|>~])", r"\\\1", text)
     # A line break does not stop CommonMark from recognizing a new list or rule.
@@ -139,12 +144,14 @@ def _markdown_block(block: _Block) -> str:
     if isinstance(block, _TextBlock):
         return _literal(block.text)
     if isinstance(block, _CodeBlock):
-        fence = "`" * max(3, max((len(m) + 1 for m in re.findall(r"`+", block.text)), default=3))
-        return fence + "text\n" + block.text + "\n" + fence
+        text = _normalize_newlines(block.text)
+        fence = "`" * max(3, max((len(m) + 1 for m in re.findall(r"`+", text)), default=3))
+        return fence + "text\n" + text + "\n" + fence
     headers, rows = block.headers, block.rows
     def row(values):
         return "| " + " | ".join(_literal(v).replace("<br>\n", "<br>") for v in values) + " |"
-    return "\n".join([row(headers), row(["---"] * len(headers))] + [row(r) for r in rows])
+    separator = "| " + " | ".join("---" for _ in headers) + " |"
+    return "\n".join([row(headers), separator] + [row(r) for r in rows])
 
 
 def _set_style_font(style, font_name: str) -> None:
@@ -205,11 +212,11 @@ class PaperReportRenderer:
                 document.add_heading(heading, 1)
                 for index, line in enumerate(lines):
                     if isinstance(line, _TextBlock):
-                        paragraph = document.add_paragraph(line.text)
+                        paragraph = document.add_paragraph(_normalize_newlines(line.text))
                         if index + 1 < len(lines) and isinstance(lines[index + 1], _TableBlock):
                             paragraph.paragraph_format.keep_with_next = True
                     elif isinstance(line, _CodeBlock):
-                        run = document.add_paragraph().add_run(line.text)
+                        run = document.add_paragraph().add_run(_normalize_newlines(line.text))
                         run.font.name = "Consolas"
                     else:
                         visible = [i for i, column in enumerate(line.columns) if column.role != "note"]
@@ -229,10 +236,10 @@ class PaperReportRenderer:
                             column.width = Mm(166 * weight / sum(weights))
                         t.rows[0]._tr.get_or_add_trPr().append(OxmlElement("w:tblHeader"))
                         for cell, text in zip(t.rows[0].cells, headers):
-                            cell.text = text
+                            cell.text = _normalize_newlines(text)
                         for row in rows:
                             for cell, text in zip(t.add_row().cells, row):
-                                cell.text = text
+                                cell.text = _normalize_newlines(text)
                         for index, row in enumerate(t.rows):
                             for cell, column in zip(row.cells, t.columns):
                                 cell.width = column.width
@@ -252,7 +259,7 @@ class PaperReportRenderer:
                                         run.font.size = Pt(10)
                                         run.bold = index == 0
                         for note in notes:
-                            document.add_paragraph(note)
+                            document.add_paragraph(_normalize_newlines(note))
             with paths[0].open("x", encoding="utf-8") as stream:
                 created.append(paths[0])
                 stream.write(markdown)

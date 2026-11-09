@@ -1,6 +1,6 @@
 # 报告生成模块验收
 
-2026-11-09，集成分支 feat/reporting。初次功能与审查修正对应提交 e6b1a18a3c147dff2e5210ca386007d46e928173。后续用户复查提出的三项问题已进一步修复；当前完整测试为 32 项通过，最新验证见末节。
+2026-11-09，集成分支 feat/reporting。初次功能与审查修正对应提交 e6b1a18a3c147dff2e5210ca386007d46e928173。后续用户复查提出的问题已进一步修复；当前完整测试为 38 项通过，最新验证见末节。
 
 ## 实际执行
 
@@ -58,3 +58,15 @@
 使用 bundled Python 重新生成三组样例，再经 Word 16.0 和 bundled Poppler 渲染。完整样例 3 页、复杂样例 4 页、最小样例 2 页，全部 9 页已查看。使用 PDF 字符字体信息独立核对全部页面中字号不小于 14pt 的中文标题，均为 **SimHei**；原先出现的 MS Gothic、微软雅黑混用已不再出现。列宽调整后的表格、长说明与命令保持可读，没有明显截断、重叠或溢出。
 
 新产物位于主检出目录忽略的 `artifacts/reporting-fixes/`：pytest.txt、font-audit.json、markdown-audit.txt、literal/rendered.html，以及 final-samples 下的输入、两种报告文档和页面检查产物。旧样例保留，新的交付示例应使用本目录中的 Word 文件。
+
+## Markdown 结构和换行的再次修复
+
+用户再次授权修复 P1 表格失效和 P2 换行处理问题。本次未更改共享契约、依赖或标题字体。
+
+- 结构语法与数据转义分开：表格分隔行直接生成，表头和单元格仍作字面转义。新增测试先失败后通过，既核对有效分隔行，也核对值为 `---` 的单元格保留字面转义。
+- 先将字段的 CRLF、CR 规范化为逻辑 LF，再做 Markdown 转义。Word 段落、表格、说明和命令也在写入时规范化，避免 python-docx 把 CRLF 写成两次换行。新增摘要、引用和命令的换行回归测试先失败后通过；原始分析数据没有被修改。
+- 全项目测试 **38 passed in 1.52s**，报告模块 22 项通过。本轮新增 6 个参数化后的用例，不新增测试依赖。
+- 使用实际 marked 解析器检查五组公开导出结果：complete、complex、crlf、cr 均生成预期 **6 张 HTML 表格**，minimal 为 0；全部没有意外列表或分隔线节点。CRLF/CR 中的加号、序号和分隔线保留原文，没有多余反斜杠，命令逻辑行数一致。
+- 普通 LF 的完整、复杂和最小样例，其 document.xml、styles.xml、settings.xml 均与上轮已逐页检查的样例相同，因此复用此前 9 页 Word 验收依据。另将 CRLF 完整样例经 Word 与 Poppler 渲染，实际查看全部 4 页；摘要、引用、表格和命令没有多余空行或明显溢出。CR 样例的内容及样式 XML 与 CRLF 样例相同。
+
+本轮输入 JSON、两种报告、实际解析 HTML、parser-audit.json、word-xml-comparison.json 和 CRLF 页面产物保存在主检出目录忽略的 `artifacts/reporting-markdown-fixes/`。Markdown 新交付示例应使用此目录中的文件；旧版转义回归的示例保留作历史记录。
