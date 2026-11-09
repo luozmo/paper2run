@@ -1,0 +1,1 @@
+"""Repository inspection module boundary."""

@@ -37,6 +37,23 @@ class CodeAvailability(str, Enum):
     UNCERTAIN = "uncertain"
 
 
+class ManifestKind(str, Enum):
+    REQUIREMENTS = "requirements"
+    PYPROJECT = "pyproject"
+    SETUP_PY = "setup_py"
+    ENVIRONMENT = "environment"
+    DOCKERFILE = "dockerfile"
+    OTHER = "other"
+
+
+class ComparisonStatus(str, Enum):
+    MATCH = "match"
+    MISMATCH = "mismatch"
+    MISSING_IN_REPOSITORY = "missing_in_repository"
+    MISSING_IN_PAPER = "missing_in_paper"
+    UNKNOWN = "unknown"
+
+
 class ExperimentCategory(str, Enum):
     DATASET = "dataset"
     MODEL = "model"
@@ -111,6 +128,59 @@ class MissingItem(BaseModel):
     reason: str | None = None
 
 
+class RepoManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+
+    path: str = Field(min_length=1)
+    kind: ManifestKind = ManifestKind.OTHER
+    evidence: Evidence
+
+
+class RepositoryEntryPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1)
+    command: str | None = None
+    evidence: list[Evidence] = Field(default_factory=list)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class RepoInspectionResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    repo_url: str = Field(min_length=1)
+    readme_path: str | None = None
+    manifests: list[RepoManifest] = Field(default_factory=list)
+    dependencies: list[DependencyInfo] = Field(default_factory=list)
+    entry_points: list[RepositoryEntryPoint] = Field(default_factory=list)
+    run_commands: list[str] = Field(default_factory=list)
+    structure_summary: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ExperimentComparisonItem(BaseModel):
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+
+    name: str = Field(min_length=1)
+    category: ExperimentCategory = ExperimentCategory.OTHER
+    paper_value: str | None = None
+    repo_value: str | None = None
+    status: ComparisonStatus = ComparisonStatus.UNKNOWN
+    evidence: list[Evidence] = Field(default_factory=list)
+    notes: str | None = None
+
+
+class ExperimentComparison(BaseModel):
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+
+    items: list[ExperimentComparisonItem] = Field(default_factory=list)
+    missing_items: list[MissingItem] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    generated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+
+
 class PaperReport(BaseModel):
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
 
@@ -122,6 +192,8 @@ class PaperReport(BaseModel):
     experiment_parameters: list[ExperimentParameter] = Field(
         default_factory=list
     )
+    repo_inspection: RepoInspectionResult | None = None
+    experiment_comparison: ExperimentComparison | None = None
     missing_items: list[MissingItem] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     generated_at: datetime = Field(

@@ -275,8 +275,101 @@ paper2run/
 | `scripts/setup_dsh.ps1`        | 安装并验证本地 DSH runtime                         |
 | `tests/`                       | 覆盖模型、PDF、Prompt 和 Agent 的测试              |
 
-# 三、待完成工作（？
+# 三、协作说明
 
-1. 由于大多数论文没有标准自己的github仓库，需要根据论文标题、作者、DOI 和链接搜索 GitHub 仓库，区分官方实现、疑似官方实现、第三方复现和无法确认等
-2. 读取并解析仓库依赖文件，对照论文与仓库的实验参数，并根据上述内容由agent自动生成 Markdown 和 Word 报告
-3. 完成中期汇报ppt
+完整的协作规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。所有成员开始开发前应先阅读该文件。
+
+## 1. 模块边界
+
+| 模块 | 主要目录 | 负责内容 |
+| --- | --- | --- |
+| 共享契约与流程集成 | `app/models.py`、`app/interfaces.py`、`app/pipeline/` | 数据模型、模块接口、流水线集成 |
+| 仓库发现 | `app/repo_discovery/` | GitHub 检索、仓库获取、候选仓库排序与官方状态判断 |
+| 仓库检查 | `app/repo_inspection/` | 依赖文件解析、入口与运行命令分析、论文与仓库实验条件比较 |
+| 报告生成 | `app/reporting/` | Markdown 和 Word 报告渲染 |
+
+每个人应只修改自己负责的模块目录。需要跨模块修改时，先与对应负责人确认。
+
+## 2. 分支与 PR
+
+不要把所有人的修改都直接堆到 `main` 分支。每个功能从最新的 `main` 创建独立分支：
+
+```powershell
+git switch main
+git pull origin main
+git switch -c feat/repo-discovery
+```
+
+推荐分支名：
+
+```text
+feat/repo-discovery
+feat/repo-inspection
+feat/reporting
+fix/<问题名>
+docs/<文档主题>
+```
+
+完成一个可独立评审的小功能后提交 Pull Request。PR 合并前应满足：
+
+1. 至少一位成员完成 Review；
+2. GitHub Actions 中的测试通过；
+3. 只包含当前模块的修改；
+4. 不提交 `.venv/`、`artifacts/`、API Key 和运行产物。
+
+## 3. 共享文件单写者规则
+
+以下文件由集成负责人统一维护，避免多人同时修改造成冲突：
+
+- `app/models.py`
+- `app/config.py`
+- `app/interfaces.py`
+- `app/pipeline/`
+- `scripts/run_paper.py`
+- `pyproject.toml`
+- `.github/`
+- 根目录 `README.md`
+
+需要新增共享模型字段、依赖或接口时，先说明需求，由集成负责人修改共享契约并合并后，其他成员再同步最新 `main`。
+
+## 4. 模块接口
+
+各模块只通过统一的 Pydantic 模型和 `app/interfaces.py` 中的协议交互：
+
+```text
+RepoDiscoveryService
+  → list[RepoCandidate]
+  → Path
+
+RepoInspectionService
+  → RepoInspectionResult
+  → ExperimentComparison
+
+ReportRenderer
+  → list[Path]
+```
+
+不要让一个业务模块直接导入另一个业务模块的内部文件。模块组合统一放在 `app/pipeline/` 中完成。
+
+## 5. 提交前检查
+
+同步主分支：
+
+```powershell
+git fetch origin
+git rebase origin/main
+```
+
+运行完整测试：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+测试未通过时不要提交 PR。
+
+# 四、待完成工作
+
+1. 根据论文标题、作者、DOI 和仓库链接检索 GitHub，区分官方实现、疑似官方实现、第三方复现和无法确认等状态。
+2. 读取并解析仓库依赖文件，对照论文与仓库的实验参数，由 Agent 自动生成 Markdown 和 Word 报告。
+3. 完成中期汇报 PPT。
