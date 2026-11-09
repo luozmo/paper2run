@@ -42,4 +42,6 @@
 
 后续用户调用 to-spec，已复查现有接口与上述需求，并生成同目录 SPEC.md。规格包含 30 条用户故事、实现边界、以 ReportRenderer.render 为入口的行为测试及页面验收标准。本次没有发现需要重开需求讨论的阻塞问题。项目缺少 issue tracker 与 triage 标签配置；依据 to-spec 的明确要求，告知用户先运行 /setup-matt-pocock-skills，因此暂未发布远程 Issue 或应用 ready-for-agent 标签。
 
+随后用户明确决定不发布 Issue、不执行全仓 setup，并调用 to-tickets 拆分本地工单。用户已批准四张工单及其依赖：01 基础双格式导出与文件保护 → 02 完整分析内容展示 → 03 证据编号与来源追溯 → 04 复杂内容可靠呈现与最终验收。工单各自保存于 `.scratch/reporting-export/issues/`。这一决定替代前述远程发布配置的等待事项；无待回答问题，仍未授权开始实现。本地 ready-for-agent 状态不代表已经开始执行或验收通过。
+
 尚未做出需要 ADR 记录的高成本架构取舍。
