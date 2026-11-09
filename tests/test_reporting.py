@@ -110,3 +110,25 @@ def test_word_tables_repeat_headers_and_anchor_first_row(tmp_path):
     assert table.rows[0]._tr.xpath('./w:trPr/w:tblHeader')
     assert all(p.paragraph_format.keep_with_next for c in table.rows[0].cells for p in c.paragraphs)
     assert not any(p.paragraph_format.keep_with_next for c in table.rows[1].cells for p in c.paragraphs)
+
+def test_missing_items_and_all_warning_contexts_explicitly_lack_evidence(tmp_path):
+    report = PaperReport(
+        paper=PaperMetadata(title="证据标记"),
+        missing_items=[MissingItem(field="seed", description="论文未说明随机种子")],
+        warnings=["训练脚本无法运行"],
+        repo_inspection=RepoInspectionResult(repo_url="https://example.org", warnings=["检查不完整"]),
+        experiment_comparison=ExperimentComparison(
+            missing_items=[MissingItem(field="batch", description="批量大小缺失")],
+            warnings=["参数无法核对"]),
+    )
+    paths = PaperReportRenderer().render(report, tmp_path)
+    outputs = [paths[0].read_text(encoding="utf-8"), "\n".join(p.text for p in Document(paths[1]).paragraphs)]
+    for output in outputs:
+        for statement in [
+            "报告缺失项：seed；论文未说明随机种子；原因：未提供（未提供证据）",
+            "报告警告：训练脚本无法运行（未提供证据）",
+            "仓库检查警告：检查不完整（未提供证据）",
+            "参数对照缺失项：batch；批量大小缺失；原因：未提供（未提供证据）",
+            "参数对照警告：参数无法核对（未提供证据）",
+        ]:
+            assert statement in output

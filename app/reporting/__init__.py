@@ -1,11 +1,15 @@
 """Export supplied analysis data as Markdown and Word report documents."""
-from pathlib import Path
 import html
 import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TypeAlias
+
 from docx import Document
 from docx.shared import Mm, RGBColor, Pt
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
+
 from app.models import PaperReport
 
 
@@ -13,7 +17,26 @@ class ReportExportError(RuntimeError):
     """Both report documents could not be exported safely."""
 
 
-def _sections(report: PaperReport) -> list[tuple[str, list[str]]]:
+@dataclass(frozen=True)
+class _TextBlock:
+    text: str
+
+
+@dataclass(frozen=True)
+class _CodeBlock:
+    text: str
+
+
+@dataclass(frozen=True)
+class _TableBlock:
+    headers: list[str]
+    rows: list[list[str]]
+
+
+_Block: TypeAlias = _TextBlock | _CodeBlock | _TableBlock
+
+
+def _sections(report: PaperReport) -> list[tuple[str, list[_Block]]]:
     evidence = []
     def refs(items):
         labels = []
@@ -36,8 +59,8 @@ def _sections(report: PaperReport) -> list[tuple[str, list[str]]]:
     status = {"match": "一致", "mismatch": "不一致", "missing_in_repository": "仓库缺失", "missing_in_paper": "论文缺失", "unknown": "无法确认"}
     def value(v):
         return str(v) if v is not None else "未提供"
-    def table(headers, rows):
-        return (headers, rows)
+    def table(headers: list[str], rows: list[list[str]]) -> _TableBlock:
+        return _TableBlock(headers, rows)
     repo = [f"仓库可用状态：{available[report.code_availability]}（未提供证据）", f"选中仓库：{value(report.selected_repo_url)}（未提供证据）"]
     if report.repo_candidates:
         repo.append(table(["候选仓库", "所有者", "名称", "官方状态", "置信度", "说明", "证据"], [[r.url, value(r.owner), value(r.name), official[r.official_status], str(r.confidence), value(r.notes), refs(r.evidence)] for r in report.repo_candidates]))
@@ -62,9 +85,9 @@ def _sections(report: PaperReport) -> list[tuple[str, list[str]]]:
         dependencies.append(table(["依赖清单路径", "清单类型", "证据"], [[m.path, str(m.kind), refs([m.evidence])] for m in inspection.manifests]) if inspection.manifests else "未提供依赖清单信息。")
         for entry in inspection.entry_points:
             commands.append("入口及入口命令证据：" + refs(entry.evidence))
-            commands.extend([f"运行入口：{entry.path}（置信度：{entry.confidence}）", ("code", entry.command)] if entry.command is not None else [f"运行入口：{entry.path}；未提供入口命令。"])
+            commands.extend([f"运行入口：{entry.path}（置信度：{entry.confidence}）", _CodeBlock(entry.command)] if entry.command is not None else [f"运行入口：{entry.path}；未提供入口命令。"])
         for command in inspection.run_commands:
-            commands.extend(["运行命令（未提供证据）", ("code", command)])
+            commands.extend(["运行命令（未提供证据）", _CodeBlock(command)])
         if not commands:
             commands.append("未提供运行入口与命令信息。")
     conditions = [table(["类别", "参数", "值", "置信度", "证据"], [[category[p.category], p.name, p.value, str(p.confidence), refs(p.evidence)] for p in report.experiment_parameters])] if report.experiment_parameters else ["未提供论文实验条件信息。"]
@@ -73,8 +96,8 @@ def _sections(report: PaperReport) -> list[tuple[str, list[str]]]:
     warnings = []
     for context, missing, messages in [("报告", report.missing_items, report.warnings), ("仓库检查", [], inspection.warnings if inspection else []), ("参数对照", comparison.missing_items if comparison else [], comparison.warnings if comparison else [])]:
         for item in missing:
-            warnings.append(f"{context}缺失项：{item.field}；{item.description}；原因：{value(item.reason)}")
-        warnings.extend(f"{context}警告：{message}" for message in messages)
+            warnings.append(f"{context}缺失项：{item.field}；{item.description}；原因：{value(item.reason)}（未提供证据）")
+        warnings.extend(f"{context}警告：{message}（未提供证据）" for message in messages)
     overview = ["本报告文档整理已有分析数据，供准备复现论文时查阅。", f"上游仓库可用状态：{available[report.code_availability]}。", f"已提供候选仓库 {len(report.repo_candidates)} 个、汇总依赖 {len(report.dependencies)} 项、论文实验条件 {len(report.experiment_parameters)} 项。", "仓库检查结果：" + ("已提供。" if inspection else "未提供。"), "参数对照结果：" + ("已提供。" if comparison else "未提供。"), f"已有缺失项与警告 {len(warnings)} 条，详见对应章节。"]
     evidence_blocks = []
     for number, item in enumerate(evidence, 1):
@@ -85,22 +108,23 @@ def _sections(report: PaperReport) -> list[tuple[str, list[str]]]:
             evidence_blocks.append("原文引用：" + item.quote)
         if item.url is not None:
             evidence_blocks.append("链接：" + item.url)
-    return [("概览", overview), ("论文基本信息", metadata), ("代码仓库及官方状态", repo), ("依赖与环境", dependencies), ("运行入口与命令", commands), ("论文实验条件", conditions), ("参数对照", comparisons), ("缺失项与警告", warnings or ["未提供缺失项与警告信息。"]), ("证据", evidence_blocks or ["未提供证据。"]) ]
+    sections = [("概览", overview), ("论文基本信息", metadata), ("代码仓库及官方状态", repo), ("依赖与环境", dependencies), ("运行入口与命令", commands), ("论文实验条件", conditions), ("参数对照", comparisons), ("缺失项与警告", warnings or ["未提供缺失项与警告信息。"]), ("证据", evidence_blocks or ["未提供证据。"]) ]
+    return [(heading, [_TextBlock(block) if isinstance(block, str) else block for block in blocks]) for heading, blocks in sections]
 
 
 
-def _literal(text):
+def _literal(text: str) -> str:
     text = html.escape(text, quote=False)
     return re.sub(r"([\\`*{}\[\]#_!|>~])", r"\\\1", text).replace("\n", "<br>\n")
 
 
-def _markdown_block(block):
-    if isinstance(block, str):
-        return _literal(block)
-    if block[0] == "code":
-        fence = "`" * max(3, max((len(m) + 1 for m in re.findall(r"`+", block[1])), default=3))
-        return fence + "text\n" + block[1] + "\n" + fence
-    headers, rows = block
+def _markdown_block(block: _Block) -> str:
+    if isinstance(block, _TextBlock):
+        return _literal(block.text)
+    if isinstance(block, _CodeBlock):
+        fence = "`" * max(3, max((len(m) + 1 for m in re.findall(r"`+", block.text)), default=3))
+        return fence + "text\n" + block.text + "\n" + fence
+    headers, rows = block.headers, block.rows
     def row(values):
         return "| " + " | ".join(_literal(v).replace("<br>\n", "<br>") for v in values) + " |"
     return "\n".join([row(headers), row(["---"] * len(headers))] + [row(r) for r in rows])
@@ -145,13 +169,13 @@ class PaperReportRenderer:
             for heading, lines in sections:
                 document.add_heading(heading, 1)
                 for line in lines:
-                    if isinstance(line, str):
-                        document.add_paragraph(line)
-                    elif line[0] == "code":
-                        run = document.add_paragraph().add_run(line[1])
+                    if isinstance(line, _TextBlock):
+                        document.add_paragraph(line.text)
+                    elif isinstance(line, _CodeBlock):
+                        run = document.add_paragraph().add_run(line.text)
                         run.font.name = "Consolas"
                     else:
-                        headers, rows = line
+                        headers, rows = line.headers, line.rows
                         t = document.add_table(rows=1, cols=len(headers))
                         t.style = "Table Grid"
                         t.autofit = False
