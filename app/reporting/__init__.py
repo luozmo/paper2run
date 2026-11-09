@@ -168,18 +168,28 @@ class PaperReportRenderer:
             document.add_heading("论文复现分析报告", 0)
             for heading, lines in sections:
                 document.add_heading(heading, 1)
-                for line in lines:
+                for index, line in enumerate(lines):
                     if isinstance(line, _TextBlock):
-                        document.add_paragraph(line.text)
+                        paragraph = document.add_paragraph(line.text)
+                        if index + 1 < len(lines) and isinstance(lines[index + 1], _TableBlock):
+                            paragraph.paragraph_format.keep_with_next = True
                     elif isinstance(line, _CodeBlock):
                         run = document.add_paragraph().add_run(line.text)
                         run.font.name = "Consolas"
                     else:
                         headers, rows = line.headers, line.rows
+                        notes = []
+                        if "说明" in headers:
+                            note_column = headers.index("说明")
+                            identity_column = headers.index("候选仓库") if "候选仓库" in headers else headers.index("参数")
+                            label = "候选仓库" if "候选仓库" in headers else "参数"
+                            notes = [f"{label} {row[identity_column]}；说明：{row[note_column]}" for row in rows]
+                            headers = [header for i, header in enumerate(headers) if i != note_column]
+                            rows = [[cell for i, cell in enumerate(row) if i != note_column] for row in rows]
                         t = document.add_table(rows=1, cols=len(headers))
                         t.style = "Table Grid"
                         t.autofit = False
-                        weights = {7: [22, 13, 14, 15, 10, 18, 12], 5: [22, 28, 18, 12, 14], 3: [45, 22, 27]}[len(headers)]
+                        weights = {6: [30, 18, 18, 18, 14, 14], 7: [22, 13, 14, 15, 10, 18, 12], 5: [22, 28, 18, 12, 14], 3: [45, 22, 27]}[len(headers)]
                         for column, weight in zip(t.columns, weights):
                             column.width = Mm(166 * weight / sum(weights))
                         t.rows[0]._tr.get_or_add_trPr().append(OxmlElement("w:tblHeader"))
@@ -206,6 +216,8 @@ class PaperReportRenderer:
                                     for run in paragraph.runs:
                                         run.font.size = Pt(10)
                                         run.bold = index == 0
+                        for note in notes:
+                            document.add_paragraph(note)
             with paths[0].open("x", encoding="utf-8") as stream:
                 created.append(paths[0])
                 stream.write(markdown)

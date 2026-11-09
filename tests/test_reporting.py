@@ -132,3 +132,20 @@ def test_missing_items_and_all_warning_contexts_explicitly_lack_evidence(tmp_pat
             "参数对照警告：参数无法核对（未提供证据）",
         ]:
             assert statement in output
+
+def test_word_notes_remain_associated_and_table_labels_stay_with_tables(tmp_path):
+    report = PaperReport(
+        paper=PaperMetadata(title="版式"),
+        repo_candidates=[RepoCandidate(url="https://example.org/repo", notes="候选说明全文")],
+        dependencies=[DependencyInfo(name="torch", source=Evidence(kind="repo_file", locator="requirements.txt"))],
+        experiment_comparison=ExperimentComparison(items=[ExperimentComparisonItem(name="batch", notes="参数说明全文")]),
+    )
+    paths = PaperReportRenderer().render(report, tmp_path)
+    doc = Document(paths[1])
+    paragraphs = [p.text for p in doc.paragraphs]
+    assert "候选仓库 https://example.org/repo；说明：候选说明全文" in paragraphs
+    assert "参数 batch；说明：参数说明全文" in paragraphs
+    assert all("说明" not in [c.text for c in t.rows[0].cells] for t in doc.tables)
+    assert next(p for p in doc.paragraphs if p.text == "汇总依赖").paragraph_format.keep_with_next
+    md = paths[0].read_text(encoding="utf-8")
+    assert "候选说明全文" in md and "参数说明全文" in md
