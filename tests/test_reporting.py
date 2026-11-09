@@ -85,7 +85,7 @@ def test_evidence_reused_and_traceable_in_both_documents(tmp_path):
     paths = PaperReportRenderer().render(PaperReport(paper=PaperMetadata(title="Trace", evidence=[source]), experiment_parameters=[ExperimentParameter(name="batch", value="32", evidence=[source])]), tmp_path)
     doc = Document(paths[1])
     for output in [paths[0].read_text(encoding="utf-8"), "\n".join([p.text for p in doc.paragraphs] + [c.text for t in doc.tables for r in t.rows for c in r.cells])]:
-        assert output.count("[E1]") >= 3
+        assert output.replace("\\", "").count("[E1]") >= 3
         assert "[E2]" not in output
         for text in ["paper.pdf", "第 3 页", "Original quotation", "https://example.org/paper"]:
             assert text in output
@@ -96,3 +96,17 @@ def test_unrelated_repository_fields_do_not_inherit_candidate_evidence(tmp_path)
     for output in [paths[0].read_text(encoding="utf-8"), "\n".join(p.text for p in Document(paths[1]).paragraphs)]:
         assert "选中仓库：https://example.org/selected（未提供证据）" in output
         assert "仓库可用状态：无法确认（未提供证据）" in output
+
+def test_literal_markup_and_embedded_fences_remain_content(tmp_path):
+    report = PaperReport(paper=PaperMetadata(title="<b>*literal*</b> & entity"), repo_inspection=RepoInspectionResult(repo_url="https://example.org/repo", run_commands=["echo hi\n```\necho bye"]))
+    paths = PaperReportRenderer().render(report, tmp_path)
+    md = paths[0].read_text(encoding="utf-8")
+    assert "&lt;b&gt;\\*literal\\*&lt;/b&gt; &amp; entity" in md
+    assert "````text\necho hi\n```\necho bye\n````" in md
+
+def test_word_tables_repeat_headers_and_anchor_first_row(tmp_path):
+    paths = PaperReportRenderer().render(PaperReport(paper=PaperMetadata(title="Layout"), repo_candidates=[RepoCandidate(url="https://example.org/" + "long" * 100)]), tmp_path)
+    table = Document(paths[1]).tables[0]
+    assert table.rows[0]._tr.xpath('./w:trPr/w:tblHeader')
+    assert all(p.paragraph_format.keep_with_next for c in table.rows[0].cells for p in c.paragraphs)
+    assert not any(p.paragraph_format.keep_with_next for c in table.rows[1].cells for p in c.paragraphs)

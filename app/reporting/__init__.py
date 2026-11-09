@@ -1,8 +1,11 @@
 """Export supplied analysis data as Markdown and Word report documents."""
 from pathlib import Path
+import html
+import re
 from docx import Document
 from docx.shared import Mm, RGBColor, Pt
 from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 from app.models import PaperReport
 
 
@@ -86,14 +89,20 @@ def _sections(report: PaperReport) -> list[tuple[str, list[str]]]:
 
 
 
+def _literal(text):
+    text = html.escape(text, quote=False)
+    return re.sub(r"([\\`*{}\[\]#_!|>~])", r"\\\1", text).replace("\n", "<br>\n")
+
+
 def _markdown_block(block):
     if isinstance(block, str):
-        return block
+        return _literal(block)
     if block[0] == "code":
-        return "```text\n" + block[1] + "\n```"
+        fence = "`" * max(3, max((len(m) + 1 for m in re.findall(r"`+", block[1])), default=3))
+        return fence + "text\n" + block[1] + "\n" + fence
     headers, rows = block
     def row(values):
-        return "| " + " | ".join(v.replace("|", "\\|").replace("\n", "<br>") for v in values) + " |"
+        return "| " + " | ".join(_literal(v).replace("<br>\n", "<br>") for v in values) + " |"
     return "\n".join([row(headers), row(["---"] * len(headers))] + [row(r) for r in rows])
 
 
@@ -145,11 +154,34 @@ class PaperReportRenderer:
                         headers, rows = line
                         t = document.add_table(rows=1, cols=len(headers))
                         t.style = "Table Grid"
+                        t.autofit = False
+                        weights = {7: [22, 13, 14, 15, 10, 18, 12], 5: [22, 28, 18, 12, 14], 3: [45, 22, 27]}[len(headers)]
+                        for column, weight in zip(t.columns, weights):
+                            column.width = Mm(166 * weight / sum(weights))
+                        t.rows[0]._tr.get_or_add_trPr().append(OxmlElement("w:tblHeader"))
                         for cell, text in zip(t.rows[0].cells, headers):
                             cell.text = text
                         for row in rows:
                             for cell, text in zip(t.add_row().cells, row):
                                 cell.text = text
+                        for index, row in enumerate(t.rows):
+                            for cell, column in zip(row.cells, t.columns):
+                                cell.width = column.width
+                                margins = OxmlElement("w:tcMar")
+                                for side in ["top", "left", "bottom", "right"]:
+                                    edge = OxmlElement("w:" + side)
+                                    edge.set(qn("w:w"), "65")
+                                    edge.set(qn("w:type"), "dxa")
+                                    margins.append(edge)
+                                cell._tc.get_or_add_tcPr().append(margins)
+                                for paragraph in cell.paragraphs:
+                                    paragraph.paragraph_format.keep_with_next = index == 0
+                                    paragraph.paragraph_format.space_after = Pt(3)
+                                    wrap = OxmlElement("w:wordWrap")
+                                    paragraph._p.get_or_add_pPr().append(wrap)
+                                    for run in paragraph.runs:
+                                        run.font.size = Pt(10)
+                                        run.bold = index == 0
             with paths[0].open("x", encoding="utf-8") as stream:
                 created.append(paths[0])
                 stream.write(markdown)
