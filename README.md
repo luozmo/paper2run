@@ -312,10 +312,8 @@ docs/<文档主题>
 
 完成一个可独立评审的小功能后提交 Pull Request。PR 合并前应满足：
 
-1. 至少一位成员完成 Review；
-2. GitHub Actions 中的测试通过；
-3. 只包含当前模块的修改；
-4. 不提交 `.venv/`、`artifacts/`、API Key 和运行产物。
+1. 只包含当前模块的修改；
+2. 不提交 `.venv/`、`artifacts/`、API Key 和运行产物。
 
 ## 3. 共享文件单写者规则
 
