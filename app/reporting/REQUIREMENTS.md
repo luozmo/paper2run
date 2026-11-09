@@ -2,7 +2,7 @@
 
 ## 当前范围
 
-2026-11-09：用户负责 Markdown、Word 报告导出。本轮仅对齐需求、记录术语和决定，不实现功能。用户已逐项接受 Q1～Q11，需求对齐完成；开始实现仍等待用户后续指示。
+2026-11-09：用户负责 Markdown、Word 报告导出，已逐项接受 Q1～Q11 并批准四张本地工单。随后明确调用 implement-spec 开始实现，授权在本地集成分支完成代码、测试与审查；子智能体使用 GPT-6.1 Sol。不发布 Issue 或 PR，不修改全仓配置。
 
 阅读基线为 main 的 1a731c7，已读 README 第三节、CONTRIBUTING.md、app/interfaces.py、app/models.py、app/pipeline/orchestrator.py 和相关契约、流水线测试。
 
