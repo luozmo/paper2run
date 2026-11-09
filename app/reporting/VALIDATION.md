@@ -70,3 +70,7 @@
 - 普通 LF 的完整、复杂和最小样例，其 document.xml、styles.xml、settings.xml 均与上轮已逐页检查的样例相同，因此复用此前 9 页 Word 验收依据。另将 CRLF 完整样例经 Word 与 Poppler 渲染，实际查看全部 4 页；摘要、引用、表格和命令没有多余空行或明显溢出。CR 样例的内容及样式 XML 与 CRLF 样例相同。
 
 本轮输入 JSON、两种报告、实际解析 HTML、parser-audit.json、word-xml-comparison.json 和 CRLF 页面产物保存在主检出目录忽略的 `artifacts/reporting-markdown-fixes/`。Markdown 新交付示例应使用此目录中的文件；旧版转义回归的示例保留作历史记录。
+
+## 可选精简建议的落实
+
+用户授权移除仅转发构造器的局部 table 函数。五处调用直接构造 _TableBlock，参数与默认值保持一致，未改变格式、文件行为或公开接口。完整测试 **38 passed in 1.53s**，差异空白检查通过；复用已有页面验收依据。

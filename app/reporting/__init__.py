@@ -71,18 +71,16 @@ def _sections(report: PaperReport) -> list[tuple[str, list[_Block]]]:
     status = {"match": "一致", "mismatch": "不一致", "missing_in_repository": "仓库缺失", "missing_in_paper": "论文缺失", "unknown": "无法确认"}
     def value(v):
         return str(v) if v is not None else "未提供"
-    def table(columns: list[_TableColumn], rows: list[list[str]], identity_label: str = "") -> _TableBlock:
-        return _TableBlock(columns, rows, identity_label)
     repo = [f"仓库可用状态：{available[report.code_availability]}（未提供证据）", f"选中仓库：{value(report.selected_repo_url)}（未提供证据）"]
     if report.repo_candidates:
-        repo.append(table([_TableColumn("候选仓库", 30, "identity"), _TableColumn("所有者", 18), _TableColumn("名称", 18), _TableColumn("官方状态", 18), _TableColumn("置信度", 14), _TableColumn("说明", 18, "note"), _TableColumn("证据", 14)], [[r.url, value(r.owner), value(r.name), official[r.official_status], str(r.confidence), value(r.notes), refs(r.evidence)] for r in report.repo_candidates], identity_label="候选仓库"))
+        repo.append(_TableBlock([_TableColumn("候选仓库", 30, "identity"), _TableColumn("所有者", 18), _TableColumn("名称", 18), _TableColumn("官方状态", 18), _TableColumn("置信度", 14), _TableColumn("说明", 18, "note"), _TableColumn("证据", 14)], [[r.url, value(r.owner), value(r.name), official[r.official_status], str(r.confidence), value(r.notes), refs(r.evidence)] for r in report.repo_candidates], identity_label="候选仓库"))
     else:
         repo.append("未提供候选仓库信息。")
     dependencies = []
     def deps(label, items):
         dependencies.append(label)
         if items:
-            dependencies.append(table([_TableColumn("名称", 22), _TableColumn("版本", 28), _TableColumn("用途", 18), _TableColumn("置信度", 12), _TableColumn("证据", 14)], [[d.name, value(d.version), scope[d.scope], str(d.confidence), refs([d.source])] for d in items]))
+            dependencies.append(_TableBlock([_TableColumn("名称", 22), _TableColumn("版本", 28), _TableColumn("用途", 18), _TableColumn("置信度", 12), _TableColumn("证据", 14)], [[d.name, value(d.version), scope[d.scope], str(d.confidence), refs([d.source])] for d in items]))
         else:
             dependencies.append(f"未提供{label}信息。")
     deps("汇总依赖", report.dependencies)
@@ -94,7 +92,7 @@ def _sections(report: PaperReport) -> list[tuple[str, list[_Block]]]:
     else:
         deps("仓库检查依赖", inspection.dependencies)
         dependencies.extend([f"检查仓库：{inspection.repo_url}（未提供证据）", f"README 路径：{value(inspection.readme_path)}（未提供证据）", f"仓库结构说明：{value(inspection.structure_summary)}（未提供证据）"])
-        dependencies.append(table([_TableColumn("依赖清单路径", 45), _TableColumn("清单类型", 22), _TableColumn("证据", 27)], [[m.path, str(m.kind), refs([m.evidence])] for m in inspection.manifests]) if inspection.manifests else "未提供依赖清单信息。")
+        dependencies.append(_TableBlock([_TableColumn("依赖清单路径", 45), _TableColumn("清单类型", 22), _TableColumn("证据", 27)], [[m.path, str(m.kind), refs([m.evidence])] for m in inspection.manifests]) if inspection.manifests else "未提供依赖清单信息。")
         for entry in inspection.entry_points:
             commands.append("入口及入口命令证据：" + refs(entry.evidence))
             commands.extend([f"运行入口：{entry.path}（置信度：{entry.confidence}）", _CodeBlock(entry.command)] if entry.command is not None else [f"运行入口：{entry.path}；未提供入口命令。"])
@@ -102,9 +100,9 @@ def _sections(report: PaperReport) -> list[tuple[str, list[_Block]]]:
             commands.extend(["运行命令（未提供证据）", _CodeBlock(command)])
         if not commands:
             commands.append("未提供运行入口与命令信息。")
-    conditions = [table([_TableColumn("类别", 22), _TableColumn("参数", 28), _TableColumn("值", 18), _TableColumn("置信度", 12), _TableColumn("证据", 14)], [[category[p.category], p.name, p.value, str(p.confidence), refs(p.evidence)] for p in report.experiment_parameters])] if report.experiment_parameters else ["未提供论文实验条件信息。"]
+    conditions = [_TableBlock([_TableColumn("类别", 22), _TableColumn("参数", 28), _TableColumn("值", 18), _TableColumn("置信度", 12), _TableColumn("证据", 14)], [[category[p.category], p.name, p.value, str(p.confidence), refs(p.evidence)] for p in report.experiment_parameters])] if report.experiment_parameters else ["未提供论文实验条件信息。"]
     comparison = report.experiment_comparison
-    comparisons = ["未提供参数对照结果。"] if comparison is None else ([table([_TableColumn("类别", 14), _TableColumn("参数", 28, "identity"), _TableColumn("论文值", 18), _TableColumn("仓库值", 18), _TableColumn("状态", 18), _TableColumn("说明", 18, "note"), _TableColumn("证据", 14)], [[category[i.category], i.name, value(i.paper_value), value(i.repo_value), status[i.status], value(i.notes), refs(i.evidence)] for i in comparison.items], identity_label="参数")] if comparison.items else ["未提供参数对照条目。"])
+    comparisons = ["未提供参数对照结果。"] if comparison is None else ([_TableBlock([_TableColumn("类别", 14), _TableColumn("参数", 28, "identity"), _TableColumn("论文值", 18), _TableColumn("仓库值", 18), _TableColumn("状态", 18), _TableColumn("说明", 18, "note"), _TableColumn("证据", 14)], [[category[i.category], i.name, value(i.paper_value), value(i.repo_value), status[i.status], value(i.notes), refs(i.evidence)] for i in comparison.items], identity_label="参数")] if comparison.items else ["未提供参数对照条目。"])
     warnings = []
     for context, missing, messages in [("报告", report.missing_items, report.warnings), ("仓库检查", [], inspection.warnings if inspection else []), ("参数对照", comparison.missing_items if comparison else [], comparison.warnings if comparison else [])]:
         for item in missing:
