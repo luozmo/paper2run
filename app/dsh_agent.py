@@ -6,6 +6,7 @@ import json
 import re
 import uuid
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,15 @@ from app.prompt_loader import PromptLoader
 
 Runner = Callable[[str, Path, str], str]
 SAFE_JOB_ID = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+@dataclass(frozen=True, slots=True)
+class PaperAnalysisRun:
+    """One completed paper extraction with reusable pipeline context."""
+
+    report: PaperReport
+    paper_text: str
+    workspace: Path
 
 
 class DshAgentError(RuntimeError):
@@ -66,6 +76,20 @@ class PaperAnalysisAgent:
         session_id: str | None = None,
     ) -> PaperReport:
         """Extract a PaperReport from one PDF."""
+        return self.analyze_pdf_with_context(
+            pdf_path,
+            job_id=job_id,
+            session_id=session_id,
+        ).report
+
+    def analyze_pdf_with_context(
+        self,
+        pdf_path: str | Path,
+        *,
+        job_id: str | None = None,
+        session_id: str | None = None,
+    ) -> PaperAnalysisRun:
+        """Analyze a PDF and return the report plus pipeline context."""
         job = job_id or f"paper-{uuid.uuid4().hex[:12]}"
         self._validate_job_id(job)
 
@@ -73,6 +97,7 @@ class PaperAnalysisAgent:
         workspace.mkdir(parents=True, exist_ok=True)
 
         pdf = load_pdf(pdf_path)
+        paper_text = "\n\n".join(page.text for page in pdf.pages)
         paper_text_path = workspace / "paper_text.json"
         paper_text_path.write_text(
             pdf.model_dump_json(indent=2),
@@ -101,7 +126,11 @@ class PaperAnalysisAgent:
             report.model_dump_json(indent=2),
             encoding="utf-8",
         )
-        return report
+        return PaperAnalysisRun(
+            report=report,
+            paper_text=paper_text,
+            workspace=workspace,
+        )
 
     def _run_dsh(self, prompt: str, workspace: Path, session_id: str) -> str:
         """Execute one prompt through the configured DSH profile."""
