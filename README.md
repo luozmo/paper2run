@@ -1,6 +1,6 @@
 # Paper2Run
 
-Paper2Run 是一个面向计算机学生的论文复现信息助手。输入论文 PDF 后，系统使用 DeepSeek Harness（DSH）Agent 提取代码仓库候选、实验条件、环境参数和证据来源，并输出经过 Pydantic 校验的结构化报告。
+Paper2Run 是一个面向计算机学生的论文复现信息助手。输入论文 PDF 后，系统会使用 DeepSeek Harness（DSH）Agent 抽取论文信息，检索并获取 GitHub 仓库，解析依赖与运行入口，比较论文和仓库的实验条件，并生成经过 Pydantic 校验的 JSON、Markdown 和 Word 报告。
 
 # 一、安装与使用
 
@@ -18,6 +18,8 @@ cd paper2run
 - Node.js 24.9+
 - DeepSeek API Key
 - DeepSeek Harness SDK
+- GitHub 网络访问
+- 可选：`GITHUB_TOKEN`，用于提高 GitHub API 速率限制
 - Windows x64、Linux 或 macOS
 
 当前开发环境为 Windows x64。
@@ -139,7 +141,7 @@ refs:
 - DSH 使用标准 `sdk` profile
 - `sdk-minimal` 不读取 `.credentials.yaml`
 
-## 5. 运行一次论文分析
+## 5. 运行一次完整论文分析
 
 在项目根目录执行：
 
@@ -164,30 +166,50 @@ refs:
   --model deepseek-v4-flash
 ```
 
+手动指定 GitHub 仓库，覆盖自动发现结果：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_paper.py `
+  path\to\paper.pdf `
+  --job-id demo-paper-001 `
+  --repo-url https://github.com/owner/repository
+```
+
 查看帮助：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_paper.py --help
 ```
 
-命令会将最终 `PaperReport` 输出到标准输出，同时把完整结果保存到任务工作区。
+命令会依次完成论文抽取、仓库发现与获取、仓库检查、参数比较和报告生成。最终 `PaperReport` JSON 输出到标准输出，Markdown 和 Word 文件路径输出到标准错误。
+
+未传入 `--repo-url` 时系统自动发现仓库；传入后使用指定仓库覆盖自动选择结果。同一个 `job_id` 下如果报告文件已存在，渲染器会拒绝覆盖，请使用新的任务 ID 或清理对应任务目录。
 
 ## 6. 输出文件
 
 每次任务会生成：
 
 ```text
-artifacts/dsh-workspace/jobs/<job_id>/workspace/
-├─ paper_text.json
-├─ prompt.md
-└─ result.json
+artifacts/dsh-workspace/jobs/<job_id>/
+├─ workspace/
+│  ├─ paper_text.json
+│  ├─ prompt.md
+│  ├─ result.json
+│  └─ report/
+│     ├─ report.md
+│     └─ report.docx
+└─ repositories/
+   └─ owner--repo/
 ```
 
-| 文件                | 说明                             |
-| ------------------- | -------------------------------- |
-| `paper_text.json` | 按页提取的论文文本和 PDF 元数据  |
-| `prompt.md`       | 实际发送给 DSH 的完整中文 Prompt |
-| `result.json`     | 经过 Pydantic 校验的最终报告     |
+| 文件                     | 说明                                      |
+| ------------------------ | ----------------------------------------- |
+| `paper_text.json`      | 按页提取的论文文本和 PDF 元数据           |
+| `prompt.md`            | 实际发送给 DSH 的完整中文 Prompt          |
+| `result.json`          | 包含仓库检查与参数比较的最终报告          |
+| `report/report.md`     | Markdown 格式分析报告                     |
+| `report/report.docx`   | Word 格式分析报告                         |
+| `repositories/`        | 自动获取的仓库缓存，不提交 Git            |
 
 ## 7. 运行测试
 
@@ -198,26 +220,24 @@ artifacts/dsh-workspace/jobs/<job_id>/workspace/
 当前预期：
 
 ```text
-13 passed
+57 passed
 ```
 
-测试覆盖数据模型、PDF 解析、Prompt 安全、DSH Agent 文件写入、非法 JSON 处理和不安全 `job_id` 拒绝。DSH Agent 单元测试使用 fake runner，不访问真实 API。
+测试覆盖数据模型、PDF 解析、Prompt 安全、DSH Agent、流水线接口、仓库检查、报告生成和 CLI 串联。仓库发现模块目前通过真实 GitHub 获取和克隆冒烟测试验证。
 
 ## 8. 当前已验证能力
 
-已完成一次真实 DSH 端到端测试，能够提取：
+已在 RTLScout 论文上完成真实端到端测试：
 
-- 数据集
-- 模型
-- 框架
-- 硬件
-- batch size
-- 学习率
-- 训练轮数
-- 随机种子
-- 评价指标
+- 15 页 PDF 全部可解析，约 5.1 万字符
+- 自动定位官方仓库 `huawei-csl/rtlscout`，置信度 0.99
+- 解析 9 项仓库依赖
+- 发现 16 个入口脚本和 20 条运行命令
+- 生成 32 项论文与仓库参数对照
+- 成功输出 `result.json`、`report.md` 和 `report.docx`
+- 完整测试 57 项通过
 
-论文中的 GitHub 链接会被标记为候选仓库，并通过 `official_status` 和 `code_availability` 表示当前无法确认其官方状态。
+当前 32 项参数均被标记为仓库缺失，说明静态依赖与命令匹配可用，但自由文本参数的语义匹配仍需继续增强。
 
 # 二、项目与文件说明
 
@@ -229,18 +249,42 @@ paper2run/
 │  ├─ __init__.py
 │  ├─ config.py
 │  ├─ models.py
+│  ├─ interfaces.py
 │  ├─ pdf_loader.py
 │  ├─ prompt_loader.py
 │  ├─ dsh_agent.py
-│  └─ prompts/
-│     ├─ base_rules.md
-│     └─ extract_paper.md
+│  ├─ prompts/
+│  │  ├─ base_rules.md
+│  │  └─ extract_paper.md
+│  ├─ pipeline/
+│  │  ├─ __init__.py
+│  │  └─ orchestrator.py
+│  ├─ repo_discovery/
+│  │  ├─ github.py
+│  │  ├─ ranking.py
+│  │  ├─ service.py
+│  │  └─ urls.py
+│  ├─ repo_inspection/
+│  │  ├─ comparison.py
+│  │  ├─ dependencies.py
+│  │  ├─ entrypoints.py
+│  │  ├─ files.py
+│  │  ├─ manifests.py
+│  │  └─ service.py
+│  └─ reporting/
+│     └─ __init__.py
 ├─ tests/
+│  ├─ test_contracts.py
+│  ├─ test_pipeline.py
 │  ├─ test_models.py
 │  ├─ test_pdf_loader.py
 │  ├─ test_prompt_loader.py
-│  └─ test_dsh_agent.py
+│  ├─ test_dsh_agent.py
+│  ├─ test_repo_inspection.py
+│  ├─ test_reporting.py
+│  └─ test_run_paper_cli.py
 ├─ scripts/
+│  ├─ run_paper.py
 │  └─ setup_dsh.ps1
 ├─ artifacts/                 # 本地运行产物，不提交 Git
 ├─ data/
@@ -254,11 +298,14 @@ paper2run/
 ```text
 论文 PDF
   → 按页提取文本
-  → 渲染中文 Prompt
-  → 调用 DSH Agent
-  → 返回结构化 PaperReport JSON
-  → 使用 Pydantic 校验
-  → 保存结果文件
+  → DSH Agent 抽取论文信息
+  → Pydantic 校验 PaperReport
+  → GitHub 仓库发现
+  → 获取仓库
+  → 解析依赖、入口与运行命令
+  → 比较论文与仓库实验条件
+  → 生成 Markdown/Word 报告
+  → 保存最终 result.json
 ```
 
 ## 3. 文件说明
@@ -267,13 +314,19 @@ paper2run/
 | -------------------------------- | -------------------------------------------------- |
 | `app/config.py`                | 管理路径、DSH 配置和模型参数                       |
 | `app/models.py`                | 定义 PDF、仓库、依赖、实验参数、证据和最终报告模型 |
+| `app/interfaces.py`            | 定义仓库发现、仓库检查和报告渲染的服务接口         |
 | `app/pdf_loader.py`            | 按页读取 PDF 文本、页码和元数据                    |
 | `app/prompt_loader.py`         | 加载中文 Prompt、替换变量并阻止路径穿越            |
 | `app/dsh_agent.py`             | 串联 PDF、Prompt、DSH 调用和结果校验               |
+| `app/pipeline/`                | 串联完整分析流程                                   |
+| `app/repo_discovery/`          | GitHub 检索、仓库获取、候选排序和官方状态判断      |
+| `app/repo_inspection/`         | 依赖、入口、运行命令解析及实验条件比较             |
+| `app/reporting/`               | 生成 Markdown 和 Word 报告                         |
 | `app/prompts/base_rules.md`    | 定义证据、安全和输出规则                           |
 | `app/prompts/extract_paper.md` | 定义论文信息抽取任务                               |
 | `scripts/setup_dsh.ps1`        | 安装并验证本地 DSH runtime                         |
-| `tests/`                       | 覆盖模型、PDF、Prompt 和 Agent 的测试              |
+| `scripts/run_paper.py`         | 命令行完整分析入口                                 |
+| `tests/`                       | 覆盖模型、流程、模块和 CLI 的测试                  |
 
 # 三、协作说明
 
@@ -368,6 +421,8 @@ git rebase origin/main
 
 # 四、待完成工作
 
-1. 根据论文标题、作者、DOI 和仓库链接检索 GitHub，区分官方实现、疑似官方实现、第三方复现和无法确认等状态。
-2. 读取并解析仓库依赖文件，对照论文与仓库的实验参数，由 Agent 自动生成 Markdown 和 Word 报告。
-3. 完成中期汇报 PPT。
+1. 增强 YAML、配置文件、CLI 参数和 README 的语义匹配，减少自由文本实验参数被误判为缺失。
+2. 实现隔离环境配置、最小运行路径和沙箱实验执行。
+3. 使用多篇不同领域论文建立评测集，统计仓库发现、依赖解析和参数比较准确率。
+4. 继续优化报告中的差异高亮和缺失项定位。
+5. 完成图形界面。

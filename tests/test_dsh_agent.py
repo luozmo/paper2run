@@ -97,6 +97,29 @@ def test_invalid_json_raises_dsh_agent_error(tmp_path: Path) -> None:
         agent.analyze_pdf(pdf_path, job_id="job-002")
 
 
+def test_analyze_pdf_with_context_returns_paper_text(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "paper.pdf"
+    _create_pdf(pdf_path)
+
+    agent = PaperAnalysisAgent(
+        job_root=tmp_path / "jobs",
+        runner=lambda prompt, workspace, session_id: json.dumps(
+            {"paper": {"title": "Context Paper"}}
+        ),
+    )
+
+    analysis = agent.analyze_pdf_with_context(
+        pdf_path,
+        job_id="job-context",
+    )
+
+    assert analysis.report.paper.title == "Context Paper"
+    assert "batch size 256" in analysis.paper_text
+    assert analysis.workspace == (
+        tmp_path / "jobs" / "job-context" / "workspace"
+    )
+
+
 def test_unsafe_job_id_is_rejected(tmp_path: Path) -> None:
     pdf_path = tmp_path / "paper.pdf"
     _create_pdf(pdf_path)
